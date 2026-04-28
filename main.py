@@ -4,6 +4,7 @@ import models
 from schema import User as UserSchema, UserCreate
 from models import User as UserModel
 from database import SessionLocal, engine, Base
+from auth import hash_password, verify_password
 print("Tables detected:", Base.metadata.tables.keys())
 
 
@@ -24,14 +25,16 @@ def get_db():
 # create a user 
 @app.post("/users", response_model=UserSchema)
 def create_user(user: UserCreate, db: Session = Depends(get_db)):
+    hashed_password = hash_password(user.hashed_password)
     print("DB URL:", engine.url)
     db_user = UserModel(
         username=user.username,
         email=user.email,
-        password=user.password,
+        hashed_password=hashed_password,
         role=user.role,
         is_active=user.is_active
     )   
+    print("Entered password",hashed_password)
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
