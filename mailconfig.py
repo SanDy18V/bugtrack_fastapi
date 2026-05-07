@@ -1,9 +1,11 @@
 from fastapi_mail import FastMail, MessageSchema, ConnectionConfig
-
+from dotenv import load_dotenv
+load_dotenv()
+import os
 conf = ConnectionConfig(
-    MAIL_USERNAME="yourgmail@gmail.com",
-    MAIL_PASSWORD="your_app_password",
-    MAIL_FROM="yourgmail@gmail.com",
+    MAIL_USERNAME="santhoshvallavan019@gmail.com",
+    MAIL_PASSWORD=os.getenv("APP_PASSWORD"),
+    MAIL_FROM="santhoshvallavan019@gmail.com",
     MAIL_PORT=587,
     MAIL_SERVER="smtp.gmail.com",
     MAIL_STARTTLS=True,
@@ -32,5 +34,6 @@ async def send_verification_email(email, token):
     fm = FastMail(conf)
 
     await fm.send_message(message)
+    
 
     print("Email sent successfully")

@@ -82,10 +82,11 @@ def verify_email(
 
     user.is_verified = True
     user.verification_token = None
-    user.verification_expiry = None
-
+    user.verification_token_expiry = None
+    print("After:", user.is_verified)
     db.commit()
-
+    db.refresh(user)
+   
     return {
         "message": "Email verified successfully"
     }
