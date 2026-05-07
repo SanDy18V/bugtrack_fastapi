@@ -80,7 +80,7 @@ def verify_email(
             detail="Verification link expired"
         )
 
-    user.is_verified = True
+    user.is_verfied= True
     user.verification_token = None
     user.verification_token_expiry = None
     print("After:", user.is_verified)
