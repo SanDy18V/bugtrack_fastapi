@@ -43,6 +43,19 @@ class Updaterole(BaseModel):
 
 
 
+class TokenData(BaseModel):
+    username: Optional[str] = None
+
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
 #create a project api
 class ProjectBase(BaseModel):
     project_name: str
