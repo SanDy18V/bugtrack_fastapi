@@ -50,7 +50,7 @@ class TokenData(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
-
+    
 
 class LoginRequest(BaseModel):
     email: str
@@ -69,6 +69,7 @@ class ProjectCreate(ProjectBase):
 
 class ProjectResponse(ProjectBase):
     id: int
+    user_id:str
     project_key: str
     status: Optional[str] = "ACTIVE"
     is_active: Optional[bool] = True
@@ -77,3 +78,46 @@ class ProjectResponse(ProjectBase):
 
     class Config:
         from_attributes = True    
+
+
+class BugCreate(BaseModel):
+    title: str
+    description: str
+    priority: str
+    project_id: int
+    assignee_id: int
+
+class BugResponse(BaseModel):
+    id: int
+    title: str
+    description: str
+    priority: str
+    status: str
+    created_at: datetime
+    project_id: int
+    reporter_id: int
+    assignee_id: int
+
+    class Config:
+        from_attributes = True        
+       
+class DeveloperTesterCreate(BaseModel):
+    username: str   
+    email: str
+    role: str
+    employee_id: str
+    hashed_password: str
+
+class DeveloperTesterResponse(BaseModel):
+    id: int
+    username: str   
+    email: str
+    role: str
+    employee_id: str
+    admin: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+    
+

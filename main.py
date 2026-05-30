@@ -7,6 +7,10 @@ from schema import User as UserSchema, UserCreate, UserUpdate, LoginRequest, Tok
 from models import User as UserModel
 from models import Project
 from schema import ProjectCreate, ProjectResponse   
+from models import Bug
+from schema import BugCreate, BugResponse
+from models import registeredDeveloperandtester
+from schema import DeveloperTesterCreate, DeveloperTesterResponse
 from database import SessionLocal, engine, Base
 import auth
 from auth import hash_password, verify_password
@@ -16,13 +20,20 @@ from fastapi import BackgroundTasks
 from mailconfig import send_verification_email
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi import Depends
-
+from fastapi.middleware.cors import CORSMiddleware
 
 print("Tables detected:", Base.metadata.tables.keys())
 
 
 
 app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Development
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 Base.metadata.create_all(bind=engine)
 print("Tables detected:", Base.metadata.tables.keys())
@@ -36,7 +47,7 @@ def get_db():
 
 security = HTTPBearer()
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+##oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 @app.get("/protected")
 def protected_route(
@@ -60,24 +71,27 @@ def authenticate_user(db: Session, email: str, password: str):
     return user
 
 
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    try:
-        payload = jwt.decode(token, auth.SECRET_KEY, algorithms=[auth.ALGORITHM])
-        username: str | None = payload.get("sub")
-        if username is None:
-            raise credentials_exception
-    except JWTError:
-        raise credentials_exception
-    user = db.query(UserModel).filter(UserModel.email == username).first()
-    if user is None:
-        raise credentials_exception
-    return user
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+):
+    print("INSIDE GET_CURRENT_USER")
 
+    token = credentials.credentials
+
+    payload = jwt.decode(
+        token,
+        auth.SECRET_KEY,
+        algorithms=[auth.ALGORITHM]
+    )
+
+    username = payload.get("sub")
+
+    user = db.query(UserModel).filter(
+        UserModel.email == username
+    ).first()
+
+    return user
 
 def validate_token(token: str, db: Session) -> UserModel:
 
@@ -123,7 +137,7 @@ def validate_token(token: str, db: Session) -> UserModel:
 
 
 @app.post("/login", response_model=Token)
-def login_for_access_token(login_request: LoginRequest, db: Session = Depends(get_db)):
+def login_for_access_token(login_request: LoginRequest, db: Session = Depends(get_db),):
     user = authenticate_user(db, login_request.email, login_request.password)
     if not user:
         raise HTTPException(
@@ -136,12 +150,13 @@ def login_for_access_token(login_request: LoginRequest, db: Session = Depends(ge
         data={"sub": user.email, "user_id": str(user.user_id), "role": user.role},
         expires_delta=access_token_expires,
     )
+    print("Generated Access Token:", access_token)
     return {"access_token": access_token, "token_type": "bearer"}
 
 
 @app.get("/users/me", response_model=UserSchema)
 def read_current_user(current_user: UserModel = Depends(get_current_user)):
-    return current_user
+     return current_user
 
 
 # create a user 
@@ -207,33 +222,16 @@ def verify_email(
         "message": "Email verified successfully"
     }
 
-@app.post("/createprojects", response_model=ProjectResponse)
+@app.post("/createprojects")
 def create_project(
     project: ProjectCreate,
-    db: Session = Depends(get_db),
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    current_user: UserModel = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
-    print("tokenvalue:", credentials.credentials)  # debug
-
-    # Extract token
-    token = credentials.credentials
-
-    # Validate JWT token
-    user = validate_token(token, db)
-
-    print("USER ROLE:", user.role)
-
-    # Role check
-    if user.role != "ADMIN":
-        raise HTTPException(
-            status_code=403,
-            detail="Only ADMIN can create projects"
-        )
-
-    # Create project
     db_project = Project(
         project_name=project.project_name,
-        description=project.description
+        description=project.description,
+        owner_id=current_user.user_id
     )
 
     db.add(db_project)
@@ -242,4 +240,66 @@ def create_project(
 
     return db_project
 
+#report a bug
+@app.post("/reportbug", response_model=BugResponse)
+def report_bug(
+    bug: BugCreate,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user)
+):
+    db_bug = Bug(
+        title=bug.title,
+        description=bug.description,
+        priority=bug.priority,
+        project_id=bug.project_id,
+        reporter_id=current_user.id,
+        status="OPEN"
+    )
 
+    db.add(db_bug)
+    db.commit()
+    db.refresh(db_bug)
+
+    return db_bug
+
+@app.post("/createdevandtester", response_model=DeveloperTesterResponse)
+def create_developer_and_tester(
+   
+    dev_tester: DeveloperTesterCreate,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user)
+):
+    hashed_password = hash_password(dev_tester.hashed_password)
+    db_dev_tester = registeredDeveloperandtester(
+        username=dev_tester.username,
+        email=dev_tester.email,
+        role=dev_tester.role,
+        hashed_password=hashed_password,
+        employee_id=dev_tester.employee_id,
+        admin_id=current_user.user_id
+    )
+
+    db.add(db_dev_tester)
+    db.commit()
+    db.refresh(db_dev_tester)
+
+    return db_dev_tester
+
+
+
+@app.post("/loginforemployee", response_model=Token)
+def login_for_access_token(login_request: LoginRequest, db: Session = Depends(get_db),):
+    user = db.query(registeredDeveloperandtester).filter(registeredDeveloperandtester.email == login_request.email).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email, password, or email not verified",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token_expires = timedelta(minutes=auth.ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = auth.create_access_token(
+        data={"sub": user.email, "user_id": str(user.user_id), "role": user.role},
+        expires_delta=access_token_expires,
+    )
+    print("Generated Access Token:", access_token)
+    return {"access_token": access_token, "token_type": "bearer"}
