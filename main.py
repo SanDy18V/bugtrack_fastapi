@@ -1,9 +1,10 @@
 import uuid
-from fastapi import FastAPI, Depends, HTTPException, status, Header
+from fastapi import FastAPI, Depends, Form, HTTPException, status, Header
 from fastapi.security import OAuth2PasswordBearer
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 import models
-from schema import User as UserSchema, UserCreate, UserUpdate, LoginRequest, Token
+from schema import ProfilePicUploadResponse, User as UserSchema, UserCreate, UserUpdate, LoginRequest, Token
 from models import User as UserModel
 from models import Project
 from schema import ProjectCreate, ProjectResponse   
@@ -21,6 +22,10 @@ from mailconfig import send_verification_email
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi import Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi import UploadFile, File, Depends
+import shutil
+import os
+
 
 print("Tables detected:", Base.metadata.tables.keys())
 
@@ -34,6 +39,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+os.makedirs("uploads/images", exist_ok=True)
+os.makedirs("uploads/videos", exist_ok=True)
 
 Base.metadata.create_all(bind=engine)
 print("Tables detected:", Base.metadata.tables.keys())
@@ -241,21 +249,42 @@ def create_project(
     return db_project
 
 #report a bug
-@app.post("/reportbug", response_model=BugResponse)
+@app.post("/reportbug", response_model=BugCreate)
 def report_bug(
-    bug: BugCreate,
-    db: Session = Depends(get_db),
-    current_user: UserModel = Depends(get_current_user)
-):
-    db_bug = Bug(
-        title=bug.title,
-        description=bug.description,
-        priority=bug.priority,
-        project_id=bug.project_id,
-        reporter_id=current_user.id,
-        status="OPEN"
-    )
+   title: str = Form(...),
+    description: str = Form(...),
+    priority: str = Form(...),
+    project_id: int = Form(...),
+    assignee_id: int = Form(...),
 
+    screenshot: UploadFile = File(None),
+    video: UploadFile = File(None),
+
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
+):  
+    image_path = None
+    video_path = None
+    if screenshot:
+        image_path = f"uploads/images/{uuid.uuid4()}_{screenshot.filename}"
+        with open(image_path, "wb") as buffer:
+            shutil.copyfileobj(screenshot.file, buffer)
+    if video:
+        video_path = f"uploads/videos/{uuid.uuid4()}_{video.filename}"
+        with open(video_path, "wb") as buffer:
+            shutil.copyfileobj(video.file, buffer)        
+    db_bug = Bug(
+        title=title,
+        description=description,
+        priority=priority,
+        project_id=project_id,
+        assignee_id=assignee_id,
+        reporter_id=current_user.id,
+        status="OPEN",
+        screenshot_url=image_path,
+        video_url=video_path,
+    )
+    print("Bug details:", db_bug)
     db.add(db_bug)
     db.commit()
     db.refresh(db_bug)
@@ -303,3 +332,36 @@ def login_for_access_token(login_request: LoginRequest, db: Session = Depends(ge
     )
     print("Generated Access Token:", access_token)
     return {"access_token": access_token, "token_type": "bearer"}
+
+
+
+
+
+
+@app.post("/upload-profile")
+async def upload_profile(
+    file: UploadFile = File(...),
+    current_user: ProfilePicUploadResponse = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    print("current_user:", current_user)
+    os.makedirs("uploads", exist_ok=True)
+
+    file_path = f"uploads/{current_user.id}_{file.filename}"
+
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    current_user.profile_pic = file_path
+    print("Updated profile_pic:", current_user.profile_pic)
+    db.commit()
+    db.refresh(current_user)
+
+    return {
+        "message": "Profile picture uploaded",
+        "file_path": file_path
+    }
+
+
+
+  

@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from fastapi import UploadFile
 from pydantic import BaseModel;
 from typing import Optional
 
@@ -12,6 +13,7 @@ class UserBase(BaseModel):
     username: str
     email: str
     role: str
+    
    
 # create hash password for user   
 class UserCreate(UserBase):
@@ -23,6 +25,7 @@ class User(UserBase):
     created_at: datetime
     is_active: Optional[bool] = True
     is_verfied: bool=False
+    profile_pic: Optional[str] = None
 
     
     class Config:
@@ -86,9 +89,11 @@ class BugCreate(BaseModel):
     priority: str
     project_id: int
     assignee_id: int
+    screenshot_url: Optional[str] = None
+    video_url: Optional[str] = None
 
 class BugResponse(BaseModel):
-    id: int
+    bug_id: int
     title: str
     description: str
     priority: str
@@ -107,6 +112,7 @@ class DeveloperTesterCreate(BaseModel):
     role: str
     employee_id: str
     hashed_password: str
+  
 
 class DeveloperTesterResponse(BaseModel):
     id: int
@@ -114,10 +120,16 @@ class DeveloperTesterResponse(BaseModel):
     email: str
     role: str
     employee_id: str
-    admin: str
+    admin_id: str
     created_at: datetime
 
     class Config:
         from_attributes = True
     
 
+class ProfilePicUploadResponse(BaseModel):
+    message: str
+    profile_pic_url: Optional[str] = None
+
+    class Config:
+        from_attributes = True

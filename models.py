@@ -17,6 +17,7 @@ class User(Base):
     is_verfied = Column(Boolean, default=False);
     verification_token = Column(String(255), nullable=True)
     verification_token_expiry = Column(DateTime)
+    profile_pic = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     projects = relationship(
         "Project",
@@ -52,6 +53,8 @@ class Bug(Base):
     project_id = Column(Integer, ForeignKey("projects.id")) 
     reporter_id = Column( Integer, ForeignKey("usersdata.id"),  nullable=False)
     assignee_id = Column(Integer, nullable=False)   
+    screenshot_url = Column(String, nullable=True)
+    video_url = Column(String, nullable=True)
 
 class registeredDeveloperandtester(Base):
     __tablename__ = "developer_and_tester"
@@ -64,6 +67,7 @@ class registeredDeveloperandtester(Base):
     employee_id = Column(String(50), unique=True, nullable=False)
     admin_id = Column(String(50), ForeignKey("usersdata.user_id"), nullable=False)
     admin = relationship("User",back_populates="developer_and_testers")
+    profile_pic= Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
        
