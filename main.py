@@ -3,9 +3,8 @@ from fastapi import FastAPI, Depends, Form, HTTPException, status, Header
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
-import models
-from schema import ProfilePicUploadResponse, User as UserSchema, UserCreate, UserUpdate, LoginRequest, Token
-from models import User as UserModel
+from models import ProjectAssignment, User as UserModel
+from schema import AssignEmployeeRequest, ProfilePicUploadResponse, RemoveEmployeesRequest, UpdateBugPriorityRequest, User as UserSchema, UserCreate, UserUpdate, LoginRequest, Token
 from models import Project
 from schema import ProjectCreate, ProjectResponse   
 from models import Bug
@@ -25,6 +24,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi import UploadFile, File, Depends
 import shutil
 import os
+
 
 
 print("Tables detected:", Base.metadata.tables.keys())
@@ -55,19 +55,19 @@ def get_db():
 
 security = HTTPBearer()
 
-##oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
-@app.get("/protected")
-def protected_route(
-    credentials: HTTPAuthorizationCredentials = Depends(security)
-):
+# @app.get("/protected")
+# def protected_route(
+#     credentials: HTTPAuthorizationCredentials = Depends(security)
+# ):
 
-    token = credentials.credentials
+#     token = credentials.credentials
 
-    return {
-        "message": "Authenticated",
-        "token": token
-    }
+#     return {
+#         "message": "Authenticated",
+#         "token": token
+#     }
 def authenticate_user(db: Session, email: str, password: str):
     user = db.query(UserModel).filter(UserModel.email == email).first()
     if not user:
@@ -327,7 +327,7 @@ def login_for_access_token(login_request: LoginRequest, db: Session = Depends(ge
         )
     access_token_expires = timedelta(minutes=auth.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = auth.create_access_token(
-        data={"sub": user.email, "user_id": str(user.user_id), "role": user.role},
+        data={"sub": user.email, "employee_id": str(user.employee_id), "role": user.role},
         expires_delta=access_token_expires,
     )
     print("Generated Access Token:", access_token)
@@ -361,7 +361,268 @@ async def upload_profile(
         "message": "Profile picture uploaded",
         "file_path": file_path
     }
+@app.get("/projects/owner/{owner_id}", response_model=list[ProjectResponse])
+def get_projects_by_owner(
+    owner_id: str,
+    db: Session = Depends(get_db)
+):
+    projects = (
+        db.query(Project)
+        .filter(Project.owner_id == owner_id)
+        .all()
+    )
+
+    if not projects:
+        raise HTTPException(
+            status_code=404,
+            detail="No projects found for this owner"
+        )
+
+    return projects
+@app.post("/projects/assign")
+def assign_employees(
+    request: AssignEmployeeRequest,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user)
+):
+
+    project = db.query(Project).filter(
+        Project.id == request.project_id
+    ).first()
+
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    assignments = []
+
+    for employee_id in request.employee_ids:
+
+        employee = db.query(registeredDeveloperandtester).filter(
+            registeredDeveloperandtester.employee_id == employee_id
+        ).first()
+
+        if not employee:
+            continue
+
+        # Skip duplicates
+        duplicate = db.query(ProjectAssignment).filter(
+            ProjectAssignment.project_id == request.project_id,
+            ProjectAssignment.employee_id == employee_id
+        ).first()
+
+        if duplicate:
+            continue
+
+        assignments.append(
+            ProjectAssignment(
+                project_id=request.project_id,
+                employee_id=employee_id,
+                assigned_by=current_user.user_id
+            )
+        )
+
+    if assignments:
+        db.add_all(assignments)
+        db.commit()
+
+    return {
+        "message": f"{len(assignments)} employees assigned successfully"
+    }
+
+@app.delete("/projects/remove-employees-from-project")
+def remove_employees(
+    request: RemoveEmployeesRequest,
+    db: Session = Depends(get_db)
+):
+
+    deleted = (
+        db.query(ProjectAssignment)
+        .filter(
+            ProjectAssignment.project_id == request.project_id,
+            ProjectAssignment.employee_id.in_(request.employee_ids)
+        )
+        .delete(synchronize_session=False)
+    )
+
+    db.commit()
+
+    return {
+        "status": True,
+        "message": f"{deleted} employee(s) removed successfully"
+    }
+
+from sqlalchemy import func
+
+@app.get("/dashboard")
+def dashboard(
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user)
+):
+    
+    # Projects owned by logged-in admin
+    total_projects = db.query(Project).filter(
+        Project.owner_id == current_user.user_id
+    ).count()
+
+    active_projects = db.query(Project).filter(
+        Project.owner_id == current_user.user_id,
+        Project.status == "ACTIVE"
+    ).count()
+
+    completed_projects = db.query(Project).filter(
+        Project.owner_id == current_user.user_id,
+        Project.status == "COMPLETED"
+    ).count()
+
+    # Employees under admin
+    total_employees = db.query(registeredDeveloperandtester).filter(
+        registeredDeveloperandtester.admin_id == current_user.user_id
+    ).count()
+
+    developers = db.query(registeredDeveloperandtester).filter(
+        registeredDeveloperandtester.admin_id == current_user.user_id,
+        registeredDeveloperandtester.role == "DEVELOPER"
+    ).count()
+
+    testers = db.query(registeredDeveloperandtester).filter(
+        registeredDeveloperandtester.admin_id == current_user.user_id,
+        registeredDeveloperandtester.role == "TESTER"
+    ).count()
+
+    # Bugs for admin's projects
+    project_ids = db.query(Project.id).filter(
+        Project.owner_id == current_user.user_id
+    ).subquery()
+
+    total_bugs = db.query(Bug).filter(
+        Bug.project_id.in_(project_ids)
+    ).count()
+
+    open_bugs = db.query(Bug).filter(
+        Bug.project_id.in_(project_ids),
+        Bug.status == "OPEN"
+    ).count()
+
+    in_progress = db.query(Bug).filter(
+        Bug.project_id.in_(project_ids),
+        Bug.status == "IN_PROGRESS"
+    ).count()
+
+    resolved = db.query(Bug).filter(
+        Bug.project_id.in_(project_ids),
+        Bug.status == "RESOLVED"
+    ).count()
+
+    closed = db.query(Bug).filter(
+        Bug.project_id.in_(project_ids),
+        Bug.status == "CLOSED"
+    ).count()
+    
+            
+    return {
+     
+        
+        "projects": {
+            "total": total_projects,
+            "active": active_projects,
+            "completed": completed_projects
+        },
+        "employees": {
+            "total": total_employees,
+            "developers": developers,
+            "testers": testers
+        },
+        "bugs": {
+            "total": total_bugs,
+            "open": open_bugs,
+            "in_progress": in_progress,
+            "resolved": resolved,
+            "closed": closed
+        }
+    }
 
 
+@app.get(
+    "/employees/owner/{owner_id}",
+    response_model=list[DeveloperTesterResponse]
+)
+def get_employees_by_owner(
+    owner_id: str,
+    db: Session = Depends(get_db)
+):
 
-  
+    employees = (
+        db.query(registeredDeveloperandtester)
+        .filter(
+            registeredDeveloperandtester.admin_id == owner_id
+        )
+        .all()
+    )
+
+    if not employees:
+        raise HTTPException(
+            status_code=404,
+            detail="No employees found"
+        )
+
+    return employees
+
+@app.put("/bugs/{bug_id}/priority")
+def update_bug_priority(
+    bug_id: int,
+    request: UpdateBugPriorityRequest,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user)
+):
+
+    bug = db.query(Bug).filter(Bug.bug_id == bug_id).first()
+
+    if not bug:
+        raise HTTPException(
+            status_code=404,
+            detail="Bug not found"
+        )
+
+    bug.priority = request.priority
+
+    db.commit()
+    db.refresh(bug)
+
+    return {
+        "status": True,
+        "message": "Bug priority updated successfully",
+        "data": {
+            "bug_id": bug.bug_id,
+            "priority": bug.priority
+        }
+    }
+
+@app.get("/bugsfromadmin", response_model=list[BugResponse])
+def get_all_bugs(
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user)
+):
+
+ bugs = (
+        db.query(
+            Bug.bug_id,
+            Bug.title,
+            Bug.description,
+            Bug.status,
+            Bug.priority,
+            Bug.created_at,
+            Bug.reporter_id,    
+            Bug.assignee_id,
+            Bug.screenshot_url,
+            Bug.video_url,  
+            Bug.project_id,
+
+            Project.id.label("project_id"),
+            Project.project_name
+
+        )
+        .join(Project, Bug.project_id == Project.id)
+        .filter(Project.owner_id == current_user.user_id)
+        .all()
+ )
+ return bugs

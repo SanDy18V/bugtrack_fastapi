@@ -3,7 +3,7 @@ from datetime import datetime
 from fastapi import UploadFile
 from pydantic import BaseModel;
 from typing import Optional
-
+from typing import Literal
 
 
 
@@ -72,7 +72,7 @@ class ProjectCreate(ProjectBase):
 
 class ProjectResponse(ProjectBase):
     id: int
-    user_id:str
+    owner_id: str
     project_key: str
     status: Optional[str] = "ACTIVE"
     is_active: Optional[bool] = True
@@ -133,3 +133,15 @@ class ProfilePicUploadResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class AssignEmployeeRequest(BaseModel):
+    project_id: int
+    employee_ids: list[str]        
+
+class RemoveEmployeesRequest(BaseModel):
+    project_id: int
+    employee_ids: list[str]    
+
+class UpdateBugPriorityRequest(BaseModel):
+    priority: Literal["LOW", "MEDIUM", "HIGH", "CRITICAL"]    

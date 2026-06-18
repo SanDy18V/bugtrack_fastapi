@@ -1,8 +1,11 @@
+
+
 from sqlalchemy import Column, Integer, String, Boolean,Text, DateTime, ForeignKey
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from database import Base;
 import uuid
+
 
 class User(Base):
     __tablename__ = "usersdata"
@@ -27,7 +30,7 @@ class User(Base):
         "registeredDeveloperandtester", 
         back_populates="admin"
     )
-
+   
 class Project(Base):
     __tablename__ = "projects"
 
@@ -40,7 +43,7 @@ class Project(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now()) 
     owner_id = Column(String(50), ForeignKey("usersdata.user_id"))
     owner = relationship("User", back_populates="projects") 
-
+ 
 class Bug(Base):
     __tablename__ = "bugs"
 
@@ -60,7 +63,7 @@ class registeredDeveloperandtester(Base):
     __tablename__ = "developer_and_tester"
 
     id = Column(Integer, primary_key=True, index=True)
-    username = Column(String(50), index=True, nullable=False);
+    username = Column(String(50), index=True, nullable=False)
     email = Column(String(100), unique=True, index=True, nullable=False)
     hashed_password = Column(String(255), nullable=False);
     role= Column(String(50), nullable=False)
@@ -70,4 +73,31 @@ class registeredDeveloperandtester(Base):
     profile_pic= Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-       
+    
+class ProjectAssignment(Base):
+    __tablename__ = "project_assignments"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    project_id = Column(
+        Integer,
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False
+    )
+
+    employee_id = Column(
+        String,
+        ForeignKey("developer_and_tester.employee_id", ondelete="CASCADE"),
+        nullable=False
+    )
+
+    assigned_by = Column(
+        String,
+        ForeignKey("usersdata.user_id", ondelete="CASCADE"),
+        nullable=False
+    )
+
+    assigned_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now()
+    )
