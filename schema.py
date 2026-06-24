@@ -12,7 +12,7 @@ from typing import Literal
 class UserBase(BaseModel):
     username: str
     email: str
-    role: str
+    # role: str
     
    
 # create hash password for user   

@@ -155,14 +155,14 @@ def login_for_access_token(login_request: LoginRequest, db: Session = Depends(ge
         )
     access_token_expires = timedelta(minutes=auth.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = auth.create_access_token(
-        data={"sub": user.email, "user_id": str(user.user_id), "role": user.role},
+        data={"sub": user.email, "user_id": str(user.user_id),},
         expires_delta=access_token_expires,
     )
     print("Generated Access Token:", access_token)
     return {"access_token": access_token, "token_type": "bearer"}
 
 
-@app.get("/users/me", response_model=UserSchema)
+@app.get("/currentuser", response_model=UserSchema)
 def read_current_user(current_user: UserModel = Depends(get_current_user)):
      return current_user
 
@@ -174,11 +174,16 @@ def create_user(user: UserCreate, background_tasks: BackgroundTasks, db: Session
     token = str(uuid.uuid4())
     expiry_time = datetime.utcnow() + timedelta(minutes=5)
     print("DB URL:", engine.url)
+    if db.query(UserModel).filter(UserModel.email == user.email).first():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered"
+        )
     db_user = UserModel(
         username=user.username,
         email=user.email,
         hashed_password=hashed_password,
-        role=user.role,
+        # role=user.role,
         verification_token=token,
         verification_token_expiry=expiry_time
        
